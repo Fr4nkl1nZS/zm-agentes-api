@@ -27,4 +27,28 @@ async def root():
 
 @app.post("/chat")
 async def chat(mensaje: Mensaje):
-    return {"respuesta": "El asistente está funcionando"}
+     # Aquí usas tu cliente de OpenAI/Groq
+    response = client.chat.completions.create(
+        model="llama3.2",  # O el modelo que uses
+        messages=[
+            {"role": "system", "content": """
+            Eres el asistente de ZM Deportes, una empresa con 15 años de experiencia en uniformes deportivos personalizados.
+            Tu objetivo es ayudar a los clientes a diseñar y cotizar sus uniformes.
+
+            Reglas importantes:
+            1. Pregunta siempre: deporte, cantidad de uniformes, colores, si necesitan logo y tipo de tela.
+            2. Menciona los beneficios de ZM Deportes: durabilidad, comodidad y tecnología innovadora.
+            3. Ofrece ejemplos de personalización: nombres, números, parches.
+            4. Si el cliente no sabe qué quiere, pregúntale sobre el estilo de su equipo (moderno, clásico, agresivo).
+            5. Termina siempre preguntando si necesita una cotización formal.
+
+            Ejemplo de cotización:
+            - Uniforme de fútbol: desde $85,000
+            - Personalización: $15,000 adicionales
+            - Envío: $10,000 a todo Colombia
+            """},
+            {"role": "user", "content": mensaje.texto}
+        ],
+        temperature=0.8
+    )
+    return {"respuesta": response.choices[0].message.content}
