@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from coordinador import client
 
 app = FastAPI()
 
@@ -43,9 +44,8 @@ async def chat(mensaje: Mensaje):
             5. Termina siempre preguntando si necesita una cotización formal.
 
             Ejemplo de cotización:
-            - Uniforme de fútbol: desde $85,000
-            - Personalización: $15,000 adicionales
-            - Envío: $10,000 a todo Colombia
+            - Uniforme de fútbol: desde $50,000
+            - Envío: paga el cliente, se envía contra-entrega a todo Colombia
             """},
             {"role": "user", "content": mensaje.texto}
         ],
