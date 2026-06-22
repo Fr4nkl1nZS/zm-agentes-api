@@ -1,21 +1,28 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from coordinador import Coordinador
 
 app = FastAPI()
-coordinador = Coordinador()
+
+# --- CONFIGURACIÓN DE CORS ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://zmdeportes.com",  # Permitir la URL de tu sitio web
+        "http://zmdeportes.com",  # Permitir la URL de tu sitio web
+        "*"
+        ],  # Permitir todas las URLs de origen
+        allow_methods=["*"],  # Permitir todos los métodos HTTP
+        allow_headers=["*"],  # Permitir todos los encabezados
+)
 
 class Mensaje(BaseModel):
     texto: str
 
-@app.post("/chat")
-async def chat(mensaje: Mensaje):
-    try:
-        respuesta = coordinador.procesar(mensaje.texto)
-        return {"respuesta": respuesta}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.get("/")
 async def root():
     return {"mensaje": "API de ZM Deportes Agentes"}
+
+@app.post("/chat")
+async def chat(mensaje: Mensaje):
+    return {"respuesta": "El asistente está funcionando"}

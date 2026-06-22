@@ -1,0 +1,250 @@
+<!-- ZM Deportes - Widget de Chat Inteligente (versión Render) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+  /* --- Estilos del Widget --- */
+  #zm-chat-widget {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 10000;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+  #zm-chat-toggle {
+    background: #FE5915;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 65px;
+    height: 65px;
+    font-size: 28px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(254, 89, 21, 0.4);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #zm-chat-toggle:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(254, 89, 21, 0.6);
+  }
+  #zm-chat-box {
+    display: none;
+    position: absolute;
+    bottom: 80px;
+    right: 0;
+    width: 380px;
+    max-width: 90vw;
+    height: 500px;
+    max-height: 70vh;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideUp 0.3s ease;
+  }
+  #zm-chat-box.open {
+    display: flex;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  #zm-chat-header {
+    background: #FE5915;
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  #zm-chat-header .icon { font-size: 24px; }
+  #zm-chat-header .title { font-weight: bold; font-size: 1.1rem; }
+  #zm-chat-header .close-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+  }
+  #zm-chat-messages {
+    flex: 1;
+    padding: 15px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    display: flex;
+    flex-direction: column;
+  }
+  .zm-msg {
+    margin-bottom: 10px;
+    padding: 10px 14px;
+    border-radius: 15px;
+    max-width: 85%;
+    word-wrap: break-word;
+    line-height: 1.5;
+    animation: fadeIn 0.3s ease;
+  }
+  .zm-msg.user {
+    background: #FE5915;
+    color: white;
+    align-self: flex-end;
+    border-bottom-right-radius: 5px;
+  }
+  .zm-msg.bot {
+    background: #e9ecef;
+    color: #333;
+    align-self: flex-start;
+    border-bottom-left-radius: 5px;
+  }
+  .zm-msg.error {
+    background: #f8d7da;
+    color: #721c24;
+    align-self: center;
+    text-align: center;
+  }
+  #zm-chat-input-area {
+    display: flex;
+    padding: 12px 15px;
+    background: white;
+    border-top: 1px solid #eee;
+    gap: 8px;
+  }
+  #zm-chat-input {
+    flex: 1;
+    padding: 10px 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: 25px;
+    font-size: 0.95rem;
+    outline: none;
+  }
+  #zm-chat-input:focus { border-color: #FE5915; }
+  #zm-chat-send {
+    background: #FE5915;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 45px;
+    height: 45px;
+    cursor: pointer;
+    font-size: 18px;
+  }
+  #zm-chat-send:hover { background: #d94a0f; }
+  .zm-typing {
+    background: #e9ecef;
+    padding: 12px 18px;
+    border-radius: 20px;
+    color: #666;
+    font-style: italic;
+    display: inline-block;
+    align-self: flex-start;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+
+<!-- Estructura del Widget -->
+<div id="zm-chat-widget">
+  <div id="zm-chat-box">
+    <div id="zm-chat-header">
+      <span class="icon">⚽</span>
+      <span class="title">ZM Deportes</span>
+      <button class="close-btn" onclick="toggleChat()">✕</button>
+    </div>
+    <div id="zm-chat-messages"></div>
+    <div id="zm-chat-input-area">
+      <input id="zm-chat-input" type="text" placeholder="Escribe tu mensaje...">
+      <button id="zm-chat-send" onclick="sendMessage()">➤</button>
+    </div>
+  </div>
+  <button id="zm-chat-toggle" onclick="toggleChat()">💬</button>
+</div>
+
+<script>
+  // --- CONFIGURACIÓN: CAMBIA ESTA URL POR LA DE TU API EN RENDER ---
+  const API_URL = 'https://zm-agentes-api.onrender.com'; 
+
+  let chatOpen = false;
+
+  function toggleChat() {
+    const box = document.getElementById('zm-chat-box');
+    chatOpen = !chatOpen;
+    box.classList.toggle('open');
+    if (chatOpen) document.getElementById('zm-chat-input').focus();
+  }
+
+  function addMessage(text, sender) {
+    const container = document.getElementById('zm-chat-messages');
+    const div = document.createElement('div');
+    div.classList.add('zm-msg', sender);
+    div.textContent = text;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function showTyping() {
+    const container = document.getElementById('zm-chat-messages');
+    const div = document.createElement('div');
+    div.id = 'zm-typing-indicator';
+    div.classList.add('zm-typing');
+    div.textContent = '🤖 Escribiendo...';
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function removeTyping() {
+    const typing = document.getElementById('zm-typing-indicator');
+    if (typing) typing.remove();
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById('zm-chat-input');
+    const message = input.value.trim();
+    if (!message) return;
+
+    addMessage(message, 'user');
+    input.value = '';
+    input.disabled = true;
+
+    showTyping();
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: message })
+      });
+
+      removeTyping();
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error del servidor (${response.status}): ${errorText}`);
+      }
+
+      const data = await response.json();
+      addMessage(data.respuesta || data.error || 'Respuesta del agente.', 'bot');
+
+    } catch (error) {
+      removeTyping();
+      console.error('Error:', error);
+      addMessage('No pude conectar con el asistente. Por favor, inténtalo de nuevo más tarde.', 'error');
+    } finally {
+      input.disabled = false;
+      input.focus();
+    }
+  }
+
+  // Evento para enviar con Enter
+  document.getElementById('zm-chat-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') sendMessage();
+  });
+
+  // Mensaje de bienvenida
+  setTimeout(() => {
+    addMessage('¡Hola! Soy el asistente de ZM Deportes. ¿Cómo puedo ayudarte con tus uniformes personalizados?', 'bot');
+  }, 500);
+</script>
