@@ -34,7 +34,7 @@ async def chat(mensaje: Mensaje):
     try:
      # Aquí usas tu cliente de OpenAI/Groq
         response = client.chat.completions.create(
-            model="llama3.2-3b-preview",  # O el modelo que uses
+            model="llama-3.1-8b-instant",  # O el modelo que uses
             messages=[
                 {"role": "system", "content": """
                 Eres el asistente de ZM Deportes, una empresa con 15 años de experiencia en uniformes deportivos personalizados.
