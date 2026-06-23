@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from groq import Groq
 import os
+from urllib.parse import quote
+import re
 
 app = FastAPI()
 
@@ -25,6 +27,14 @@ class Mensaje(BaseModel):
 
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
+NUMERO_WHATSAPP = "573167568428"
+
+def enviar_whatsapp(numero, mensaje):
+        numero_limpio = ''.join(filter(str.isdigit, numero))
+        mensaje_codificado = quote(mensaje)
+        return f"https://api.whatsapp.com/send?phone={numero_limpio}&text={mensaje_codificado}"
+    
+    
 @app.get("/")
 async def root():
     return {"mensaje": "API de ZM Deportes Agentes con Groq"}
@@ -37,26 +47,44 @@ async def chat(mensaje: Mensaje):
             model="llama-3.1-8b-instant",  # O el modelo que uses
             messages=[
                 {"role": "system", "content": """
-                Eres el asistente de ZM Deportes, una empresa con 15 años de experiencia en uniformes deportivos personalizados.
-                Tu objetivo es ayudar a los clientes a diseñar y cotizar sus uniformes.
+                Eres el asistente de ventas de ZM Deportes, una empresa con 15 años de experiencia en uniformes deportivos personalizados.
+                
+                Tu objetivo es convertir cada conversación en una cotización formal. Sigue estas reglas:
+                1. SIEMPRE pregunta: deporte, cantidad, colores, logo, tela y fecha de entrega.
+                2. MENCIONA los beneficios: durabilidad, comodidad y tecnología innovadora.
+                3. OFRECE ejemplos de personalización: nombres, números, parches.
+                4. Cuando el cliente dé todos los datos, GENERA una cotización con estos precios:
+                   - Uniforme de fútbol: $50,000
+                   - Uniforme de baloncesto: $50,000
+                   - Personalización (logo/nombre/número): consulta el precio
+                   - Envío a todo Colombia: se paga contra-entrega
+                5. Termina SIEMPRE preguntando: "¿Te envío la cotización formal por WhatsApp?"
 
-                Reglas importantes:
-                1. Pregunta siempre: deporte, cantidad de uniformes, colores, si necesitan logo y tipo de tela.
-                2. Menciona los beneficios de ZM Deportes: durabilidad, comodidad y tecnología innovadora.
-                3. Ofrece ejemplos de personalización: nombres, números, parches.
-                4. Si el cliente no sabe qué quiere, pregúntale sobre el estilo de su equipo (moderno, clásico, agresivo).
-                5. Termina siempre preguntando si necesita una cotización formal.
-
-                Ejemplo de cotización:
-                - Uniforme de fútbol: desde $50,000
-                - Envío: paga el cliente, se envía contra-entrega a todo Colombia
+                Tono: Amable, profesional, persuasivo y en español.
                 """},
                 {"role": "user", "content": mensaje.texto}
             ],
         temperature=0.7,
         max_tokens=1024,
         )
-        return {"respuesta": response.choices[0].message.content}
+        respuesta_asistente = response.choices[0].message.content
+        
+        # --- DETECTAR SI EL CLIENTE ENVIÓ SU NÚMERO ---
+        numeros_encontrados = re.findall(r'(\d{10})', mensaje.texto)  # Busca 10 dígitos seguidos
+        
+        if numeros_encontrados:
+            numero_cliente = numeros_encontrados[0]
+            mensaje_cotizacion = "Hola, soy de ZM Deportes. Aquí tienes tu cotización personalizada según lo conversado."
+            url_whatsapp = enviar_whatsapp(numero_cliente, mensaje_cotizacion)
+            # Agregar el enlace a la respuesta del asistente
+            respuesta_asistente += f"\n\n📲 Haz clic aquí para recibir tu cotización por WhatsApp: {url_whatsapp}"
+        
+        return {"respuesta": respuesta_asistente}
+        
     except Exception as e:
         print(f"Error en Groq: {e}")
         return {"respuesta": f"Lo siento, tuve un problema: {str(e)}"}
+    
+
+    
+      
