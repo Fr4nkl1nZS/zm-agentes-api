@@ -47,20 +47,23 @@ async def chat(mensaje: Mensaje):
             model="llama-3.1-8b-instant",  # O el modelo que uses
             messages=[
                 {"role": "system", "content": """
-                Eres el asistente de ventas de ZM Deportes, una empresa con 15 años de experiencia en uniformes deportivos personalizados.
-                
-                Tu objetivo es convertir cada conversación en una cotización formal. Sigue estas reglas:
-                1. SIEMPRE pregunta: deporte, cantidad, colores, logo, tela y fecha de entrega.
-                2. MENCIONA los beneficios: durabilidad, comodidad y tecnología innovadora.
-                3. OFRECE ejemplos de personalización: nombres, números, parches.
-                4. Cuando el cliente dé todos los datos, GENERA una cotización con estos precios:
-                   - Uniforme de fútbol: $50,000
-                   - Uniforme de baloncesto: $50,000
-                   - Personalización (logo/nombre/número): consulta el precio
-                   - Envío a todo Colombia: se paga contra-entrega
-                5. Termina SIEMPRE preguntando: "¿Te envío la cotización formal por WhatsApp?"
+                Eres el asistente de ventas de ZM Deportes, con 15 años de experiencia en uniformes personalizados.
 
-                Tono: Amable, profesional, persuasivo y en español.
+                TU MISIÓN: Convertir cada conversación en una cotización formal, incluso con datos parciales.
+
+                REGLAS:
+                1. SIEMPRE pregunta: deporte, cantidad, colores, logo, tela y fecha de entrega.
+                2. SI el cliente pide una cotización o da un número de teléfono, DEBES generar una cotización BASE (con los datos que tengas) y preguntar por los faltantes.
+                3. Cotización base:
+                - Uniforme de fútbol: $50,000
+                - Uniforme de baloncesto: $55,000
+                - Personalización (logo/nombre/número): $15,000 adicional
+                - Envío a todo Colombia: se paga contra-entrega
+
+                4. SI el cliente da su número, responde:
+                "Perfecto, te envío la cotización por WhatsApp. ¿Confirmas que los detalles son: [lista de datos]? Si falta algo, dímelo y lo ajusto."
+
+                TONO: Amable, profesional, persuasivo y en español.
                 """},
                 {"role": "user", "content": mensaje.texto}
             ],
@@ -68,9 +71,40 @@ async def chat(mensaje: Mensaje):
         max_tokens=1024,
         )
         respuesta_asistente = response.choices[0].message.content
-        
+
         # --- DETECTAR SI EL CLIENTE ENVIÓ SU NÚMERO ---
-        numeros_encontrados = re.findall(r'(\d{10})', mensaje.texto)  # Busca 10 dígitos seguidos
+        texto_limpio = re.sub(r'[\s\-]', '', mensaje.texto)
+        numeros_encontrados = re.findall(r'(\d{10})', texto_limpio)
+
+        # --- DETECTAR SI EL CLIENTE PIDIÓ UNA COTIZACIÓN ---
+        if "cotización" in mensaje.texto.lower() or "precio" in mensaje.texto.lower():
+            # Buscar cantidad en el mensaje
+            cantidades = re.findall(r'(\d+)', mensaje.texto)
+            cantidad = int(cantidades[0]) if cantidades else 10  # Por defecto 10
+            
+            # Buscar deporte
+            deporte = "fútbol" if "futbol" in mensaje.texto.lower() else "baloncesto" if "baloncesto" in mensaje.texto.lower() else "deporte"
+            
+            # Precio base
+            precio_base = 50000 if deporte == "fútbol" else 55000
+            total = precio_base * cantidad
+            
+            # Generar cotización
+            cotizacion = f"""
+        📋 COTIZACIÓN ZM DEPORTES
+        Deporte: {deporte}
+        Cantidad: {cantidad}
+        Precio unitario: ${precio_base:,}
+        Subtotal: ${total:,}
+        Personalización: $15,000 adicional (opcional)
+        Envío: contra-entrega
+        TOTAL ESTIMADO: ${total:,}
+
+        *Esta es una cotización base. Los detalles finales pueden ajustar el precio.
+        """
+            # Añadir la cotización a la respuesta
+            respuesta_asistente += "\n\n" + cotizacion
+        
         
         if numeros_encontrados:
             numero_cliente = numeros_encontrados[0]
@@ -80,7 +114,7 @@ async def chat(mensaje: Mensaje):
             respuesta_asistente += f"\n\n📲 Haz clic aquí para recibir tu cotización por WhatsApp: {url_whatsapp}"
         
         return {"respuesta": respuesta_asistente}
-        
+    
     except Exception as e:
         print(f"Error en Groq: {e}")
         return {"respuesta": f"Lo siento, tuve un problema: {str(e)}"}
