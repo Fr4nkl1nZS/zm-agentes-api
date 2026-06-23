@@ -12,113 +12,223 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://zmdeportes.com",  # Permitir la URL de tu sitio web
-        "http://zmdeportes.com",  # Permitir la URL de tu sitio web
-        "https://www.zmdeportes.com",  # Permitir la URL de tu sitio web
+        "https://zmdeportes.com",
+        "http://zmdeportes.com",
+        "https://www.zmdeportes.com",
         "*"
-        ],  # Permitir todas las URLs de origen
-        allow_methods=["*"],  # Permitir todos los métodos HTTP
-        allow_headers=["*"],  # Permitir todos los encabezados
-        allow_credentials=True,  # Permitir el envío de cookies y credenciales
+    ],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=True,
 )
 
+# --- MODELO DE DATOS ---
 class Mensaje(BaseModel):
     texto: str
 
+# --- CONFIGURACIÓN DE GROQ ---
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-NUMERO_WHATSAPP = "573167568428"
+# --- CONFIGURACIÓN DE WHATSAPP ---
+NUMERO_WHATSAPP = "573167568428"  # Reemplaza con tu número
 
 def enviar_whatsapp(numero, mensaje):
-        numero_limpio = ''.join(filter(str.isdigit, numero))
-        mensaje_codificado = quote(mensaje)
-        return f"https://api.whatsapp.com/send?phone={numero_limpio}&text={mensaje_codificado}"
+    numero_limpio = ''.join(filter(str.isdigit, numero))
+    mensaje_codificado = quote(mensaje)
+    return f"https://api.whatsapp.com/send?phone={numero_limpio}&text={mensaje_codificado}"
+
+# --- FUNCIÓN PARA EXTRAER DATOS DEL MENSAJE ---
+def extraer_datos(texto):
+    datos = {
+        "nombre": None,
+        "deporte": None,
+        "cantidad": None,
+        "colores": None,
+        "logo": None,
+        "tela": None,
+        "fecha": None,
+        "numero": None
+    }
+
+    # --- DETECTAR NOMBRE ---
+    # Buscar frases como "me llamo", "soy", "mi nombre es"
+    nombre_match = re.search(r'(?:me llamo|soy|mi nombre es)\s+([A-Za-zÁÉÍÓÚáéíóúÑñ]+(?:\s+[A-Za-zÁÉÍÓÚáéíóúÑñ]+)?)', texto.lower())
+    if nombre_match:
+        datos["nombre"] = nombre_match.group(1).title()
+    else:
+        # Si no hay frase explícita, buscar palabras que parezcan nombres (capitalizadas)
+        palabras = texto.split()
+        for palabra in palabras:
+            if palabra[0].isupper() and len(palabra) > 2 and palabra.lower() not in ["yo", "mi", "un", "una", "el", "la", "los", "las"]:
+                datos["nombre"] = palabra
+                break
     
+    # Detectar deporte
+    if "futbol" in texto.lower():
+        datos["deporte"] = "fútbol"
+    elif "baloncesto" in texto.lower():
+        datos["deporte"] = "baloncesto"
+    elif "ciclismo" in texto.lower():
+        datos["deporte"] = "ciclismo"
+    elif "voleibol" in texto.lower():
+        datos["deporte"] = "voleibol"
     
+    # Detectar cantidad (números)
+    numeros = re.findall(r'(\d+)', texto)
+    if numeros:
+        datos["cantidad"] = int(numeros[0])
+    
+    # Detectar colores
+    colores = ["rojo", "azul", "verde", "blanco", "negro", "amarillo", 
+               "naranja", "morado", "rosado", "gris", "blanco"]
+    for color in colores:
+        if color in texto.lower():
+            if datos["colores"]:
+                datos["colores"] += f", {color}"
+            else:
+                datos["colores"] = color
+    
+    # Detectar número de teléfono
+    texto_limpio = re.sub(r'[\s\-]', '', texto)
+    numeros_telefono = re.findall(r'(\d{10})', texto_limpio)
+    if numeros_telefono:
+        datos["numero"] = numeros_telefono[0]
+    
+    # Detectar logo
+    if "logo" in texto.lower() or "personalizado" in texto.lower():
+        datos["logo"] = "Sí"
+    elif "no logo" in texto.lower():
+        datos["logo"] = "No"
+    
+    # Detectar tela
+    if "algodón" in texto.lower() or "algodon" in texto.lower():
+        datos["tela"] = "Algodón"
+    elif "poliéster" in texto.lower() or "poliester" in texto.lower():
+        datos["tela"] = "Poliéster"
+    elif "dri-fit" in texto.lower() or "dri fit" in texto.lower():
+        datos["tela"] = "Dri-Fit"
+    
+    # Detectar fecha
+    fecha_match = re.search(r'(\d{1,2}\s*de\s*\w+\s*de\s*\d{4}|\d{1,2}/\d{1,2}/\d{2,4})', texto)
+    if fecha_match:
+        datos["fecha"] = fecha_match.group(0)
+    
+    return datos
+
+# --- FUNCIÓN PARA DETECTAR EL PASO DE LA CONVERSACIÓN ---
+def detectar_paso(datos_cliente):
+    """Determina en qué paso está el cliente según los datos extraídos"""
+    # Si no tiene nombre, el paso es 0 (preguntar nombre)
+    if not datos_cliente["nombre"]:
+        return 0
+    
+    # Si tiene nombre y deporte, pero no cantidad
+    if datos_cliente["nombre"] and datos_cliente["deporte"] and not datos_cliente["cantidad"]:
+        return 2
+    
+    # Si tiene nombre, deporte y cantidad, pero no colores
+    if datos_cliente["nombre"] and datos_cliente["deporte"] and datos_cliente["cantidad"] and not datos_cliente["colores"]:
+        return 3
+    
+    # Si tiene todos los datos básicos
+    if datos_cliente["nombre"] and datos_cliente["deporte"] and datos_cliente["cantidad"] and datos_cliente["colores"]:
+        return 7  # Paso final: cotización
+    
+    # Si solo tiene nombre (paso 1)
+    return 1
+   
+
+# --- ENDPOINT PRINCIPAL ---
 @app.get("/")
 async def root():
-    return {"mensaje": "API de ZM Deportes Agentes con Groq"}
+    return {"mensaje": "API de ZM Deportes Agentes con Flujo Guiado"}
 
 @app.post("/chat")
 async def chat(mensaje: Mensaje):
     try:
-     # Aquí usas tu cliente de OpenAI/Groq
+        # --- EXTRAER DATOS DEL MENSAJE ---
+        datos_cliente = extraer_datos(mensaje.texto)
+        paso = detectar_paso(datos_cliente)
+        
+        # --- CONSTRUIR PROMPT CON FLUJO GUIADO ---
+        prompt_sistema = f"""
+Eres el asistente de ventas de ZM Deportes.
+
+PASO ACTUAL: {paso}
+NOMBRE DEL CLIENTE: {nombre}
+
+REGLAS:
+- PASO 0: Pregunta "¡Hola! Bienvenido a ZM Deportes. Antes de comenzar, ¿cómo te llamas?"
+- PASO 1: "¡Hola {nombre}! ¿Para qué deporte necesitas uniformes? Tenemos: ⚽ Fútbol, 🏀 Baloncesto, 🚴 Ciclismo, 🏐 Voleibol."
+- PASO 2: "Perfecto, {nombre}. ¿Cuántos uniformes necesitas?"
+- PASO 3: "¿Qué colores principales te gustarían, {nombre}?"
+- PASO 4: "¿Necesitas incluir logo, nombres o números personalizados, {nombre}?"
+- PASO 5: "¿Qué tipo de tela prefieres? (Algodón, Poliéster, Dri-Fit), {nombre}?"
+- PASO 6: "¿Cuándo necesitas la entrega, {nombre}? (Fecha aproximada)"
+- PASO 7: Genera la cotización con el nombre de {nombre} en el encabezado.
+
+SIEMPRE usa el nombre del cliente en cada interacción.
+SOLO AVANZAS AL SIGUIENTE PASO CUANDO EL CLIENTE RESPONDA.
+TONO: Amable, profesional, cercano y persuasivo.
+"""
+        
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",  # O el modelo que uses
+            model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": """
-                Eres el asistente de ventas de ZM Deportes, con 15 años de experiencia en uniformes personalizados.
-
-                TU MISIÓN: Convertir cada conversación en una cotización formal, incluso con datos parciales.
-
-                REGLAS:
-                1. SIEMPRE pregunta: deporte, cantidad, colores, logo, tela y fecha de entrega.
-                2. SI el cliente pide una cotización o da un número de teléfono, DEBES generar una cotización BASE (con los datos que tengas) y preguntar por los faltantes.
-                3. Cotización base:
-                - Uniforme de fútbol: $50,000
-                - Uniforme de baloncesto: $55,000
-                - Personalización (logo/nombre/número): $15,000 adicional
-                - Envío a todo Colombia: se paga contra-entrega
-
-                4. SI el cliente da su número, responde:
-                "Perfecto, te envío la cotización por WhatsApp. ¿Confirmas que los detalles son: [lista de datos]? Si falta algo, dímelo y lo ajusto."
-
-                TONO: Amable, profesional, persuasivo y en español.
-                """},
+                {"role": "system", "content": prompt_sistema},
                 {"role": "user", "content": mensaje.texto}
             ],
-        temperature=0.7,
-        max_tokens=1024,
+            temperature=0.7,
+            max_tokens=1024,
         )
+        
         respuesta_asistente = response.choices[0].message.content
-
-        # --- DETECTAR SI EL CLIENTE ENVIÓ SU NÚMERO ---
-        texto_limpio = re.sub(r'[\s\-]', '', mensaje.texto)
-        numeros_encontrados = re.findall(r'(\d{10})', texto_limpio)
-
-        # --- DETECTAR SI EL CLIENTE PIDIÓ UNA COTIZACIÓN ---
-        if "cotización" in mensaje.texto.lower() or "precio" in mensaje.texto.lower():
-            # Buscar cantidad en el mensaje
-            cantidades = re.findall(r'(\d+)', mensaje.texto)
-            cantidad = int(cantidades[0]) if cantidades else 10  # Por defecto 10
+        
+        # --- GENERAR COTIZACIÓN CON NOMBRE ---
+        if paso >= 7 and datos_cliente["deporte"] and datos_cliente["cantidad"]:
+            nombre_cliente = datos_cliente["nombre"] or "Cliente"
+            deporte = datos_cliente["deporte"] or "fútbol"
+            cantidad = datos_cliente["cantidad"] or 10
+            colores = datos_cliente["colores"] or "por definir"
+            logo = datos_cliente["logo"] or "No especificado"
+            tela = datos_cliente["tela"] or "No especificada"
+            fecha = datos_cliente["fecha"] or "No especificada"
             
-            # Buscar deporte
-            deporte = "fútbol" if "futbol" in mensaje.texto.lower() else "baloncesto" if "baloncesto" in mensaje.texto.lower() else "deporte"
-            
-            # Precio base
-            precio_base = 50000 if deporte == "fútbol" else 55000
+            precio_base = 50000 if deporte == "fútbol" else 55000 if deporte == "baloncesto" else 50000
             total = precio_base * cantidad
             
-            # Generar cotización
             cotizacion = f"""
-        📋 COTIZACIÓN ZM DEPORTES
-        Deporte: {deporte}
-        Cantidad: {cantidad}
-        Precio unitario: ${precio_base:,}
-        Subtotal: ${total:,}
-        Personalización: $15,000 adicional (opcional)
-        Envío: contra-entrega
-        TOTAL ESTIMADO: ${total:,}
-
-        *Esta es una cotización base. Los detalles finales pueden ajustar el precio.
-        """
-            # Añadir la cotización a la respuesta
+📋 COTIZACIÓN PARA {nombre_cliente.upper()}
+═══════════════════════════════════
+👤 Cliente: {nombre_cliente}
+⚽ Deporte: {deporte}
+👕 Cantidad: {cantidad}
+🎨 Colores: {colores}
+🖼️ Logo: {logo}
+🧵 Tela: {tela}
+📅 Fecha de entrega: {fecha}
+───────────────────────────────────
+💰 Precio unitario: ${precio_base:,}
+💵 Subtotal: ${total:,}
+🎯 Personalización: $15,000 adicional (opcional)
+📦 Envío: contra-entrega
+💲 TOTAL ESTIMADO: ${total:,}
+═══════════════════════════════════
+*{nombre_cliente}, esta cotización es válida por 7 días.
+"""
             respuesta_asistente += "\n\n" + cotizacion
-        
-        
-        if numeros_encontrados:
-            numero_cliente = numeros_encontrados[0]
-            mensaje_cotizacion = "Hola, soy de ZM Deportes. Aquí tienes tu cotización personalizada según lo conversado."
-            url_whatsapp = enviar_whatsapp(numero_cliente, mensaje_cotizacion)
-            # Agregar el enlace a la respuesta del asistente
-            respuesta_asistente += f"\n\n📲 Haz clic aquí para recibir tu cotización por WhatsApp: {url_whatsapp}"
+            
+            if datos_cliente["numero"]:
+                url_whatsapp = enviar_whatsapp(
+                    datos_cliente["numero"],
+                    f"Hola {nombre_cliente}, soy de ZM Deportes. Aquí tienes tu cotización para {cantidad} uniformes de {deporte} con colores {colores}: ${total:,}. ¿Confirmamos?"
+                )
+                respuesta_asistente += f"\n\n📲 Haz clic aquí para confirmar tu cotización por WhatsApp, {nombre_cliente}: {url_whatsapp}"
+            else:
+                respuesta_asistente += f"\n\n📱 {nombre_cliente}, para confirmar tu cotización, comparte tu número de teléfono y te enviaremos el enlace de WhatsApp."
         
         return {"respuesta": respuesta_asistente}
-    
+        
     except Exception as e:
-        print(f"Error en Groq: {e}")
+        print(f"Error: {e}")
         return {"respuesta": f"Lo siento, tuve un problema: {str(e)}"}
-    
-
-    
-      
